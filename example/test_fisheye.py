@@ -1,0 +1,30 @@
+import fisheye
+import os
+import glob
+import cv2
+
+
+base_path = r'.\imgs'
+NX, NY = 8, 6
+
+
+def main():
+    imgs_paths = glob.glob(os.path.join(base_path, '*.jpg'))
+
+    fe = fisheye.FishEye(nx=NX, ny=NY, verbose=True)
+    rms, K, D, rvecs, tvecs = fe.calibrate(
+        imgs_paths,
+        show_imgs=True
+    )
+
+    img = cv2.imread(imgs_paths[0])
+    
+    undist_img = fe.undistort(img, undistorted_size=(800, 800))
+    
+    cv2.imshow('undistorted', undist_img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    
+
+if __name__ == '__main__':
+    main()

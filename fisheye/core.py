@@ -20,12 +20,15 @@ class FishEye(object):
         self._nx = nx
         self._ny = ny
         self._verbose = verbose
-    
+        self._K = np.zeros((3, 3))
+        self._D = np.zeros((4, 1))
+        
     def calibrate(
         self,
         img_paths,
+        update_model=True,
         max_iter=30,
-        eps=0.001,
+        eps=1e-6,
         show_imgs=False
         ):
         """"""
@@ -34,12 +37,11 @@ class FishEye(object):
         chessboard_model[0, :, :2] = np.mgrid[0:self._nx, 0:self._ny].T.reshape(-1, 2)
         
         #
-        # Arrays to store the chessboard points and image points from all the images.
+        # Arrays to store the chessboard image points from all the images.
         #
-        chess_3Dpts_list = []
         chess_2Dpts_list = []
         
-        subpix_criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, max_iter, eps)
+        subpix_criteria = (cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 0.1)
         
         if show_imgs:
             cv2.namedWindow('success img', cv2.WINDOW_NORMAL)
@@ -72,9 +74,7 @@ class FishEye(object):
                 #
                 if self._verbose:
                     print('OK')
-                    
-                chess_3Dpts_list.append(chessboard_model)
-        
+                            
                 cb_2d_pts_subpix = cv2.cornerSubPix(
                     gray,
                     cb_2D_pts,
@@ -111,33 +111,74 @@ class FishEye(object):
                     cv2.waitKey(500)
 
         if show_imgs:
+            #
+            # Clean up.
+            #
             cv2.destroyAllWindows()
-        
-        flag = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC | cv2.fisheye.CALIB_CHECK_COND | cv2.fisheye.CALIB_FIX_SKEW
-        
-        rvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(len(chess_3Dpts_list))]
-        tvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(len(chess_3Dpts_list))]
-        K = np.zeros((3, 3))
-        D = np.zeros((4, 1))
-        ret, mtx, dist, rvecs1, tvecs1 = \
+
+        N_OK = len(chess_2Dpts_list)
+        rvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(N_OK)]
+        tvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(N_OK)]
+
+        #
+        # Update the intrinsic model
+        #
+        if update_model:
+            K = self._K
+            D = self._D
+        else:
+            K = self._K.copy()
+            D = self._D.copy()
+ 
+        rms, _, _, _, _ = \
             cv2.fisheye.calibrate(
-                chess_3Dpts_list,
+                [chessboard_model]*N_OK,
                 chess_2Dpts_list,
                 gray.shape[::-1],
                 K,
                 D,
                 rvecs,
                 tvecs,
-                flag,
-                (3, 12, 0)
+                cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW,
+                (cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, max_iter, eps)
             )
-        
-        return ret, mtx, dist, rvecs, tvecs
+
+        return rms, K, D, rvecs, tvecs
     
-    def undistortImg(self, distorted_img, new_K, new_size):
+    def undistort(self, distorted_img, undistorted_size=None, R=np.eye(3), K=None):
         """"""
 
-        undistort_img = np.zeros(new_size, dtype=distorted_img.dtype)
-        cv2.fisheye.undistortImage(distorted_img, K, D, undistort_img, K, (800, 800))
+        if K is None:
+            K = self._K
+        
+        if undistorted_size is None:
+            undistorted_size = distorted_img.shape[:2]
+            
+        map1, map2 = cv2.fisheye.initUndistortRectifyMap(
+            self._K,
+            self._D,
+            R,
+            K,
+            undistorted_size,
+            cv2.CV_16SC2            
+        )
+        
+        undistorted_img = cv2.remap(
+            distorted_img,
+            map1,
+            map2,
+            interpolation=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT
+        )
 
-        return undistort_img
+        return undistorted_img
+    
+    #void cv::fisheye::undistortImage(InputArray distorted, OutputArray undistorted,
+                                     #InputArray K, InputArray D, InputArray Knew, const Size& new_size)
+    #{
+        #Size size = new_size.area() != 0 ? new_size : distorted.size();
+    
+        #cv::Mat map1, map2;
+        #fisheye::initUndistortRectifyMap(K, D, cv::Matx33d::eye(), Knew, size, CV_16SC2, map1, map2 );
+        #cv::remap(distorted, undistorted, map1, map2, INTER_LINEAR, BORDER_CONSTANT);
+    #}
