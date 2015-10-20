@@ -1,8 +1,15 @@
 from __future__ import print_function
 import numpy as np
+import pickle
 import cv2
 assert cv2.__version__[0] == '3', 'The fisheye module requires opencv version >= 3.0.0'
 import os
+
+
+def load_model(filename):
+    """Load a previosly saved fisheye model."""
+    
+    return FishEye.load(filename)
 
 
 class FishEye(object):
@@ -31,7 +38,7 @@ class FishEye(object):
         eps=1e-6,
         show_imgs=False
         ):
-        """"""
+        """Calibrate a fisheye model."""
         
         chessboard_model = np.zeros((1, self._nx*self._ny, 3), np.float32)
         chessboard_model[0, :, :2] = np.mgrid[0:self._nx, 0:self._ny].T.reshape(-1, 2)
@@ -146,7 +153,7 @@ class FishEye(object):
         return rms, K, D, rvecs, tvecs
     
     def undistort(self, distorted_img, undistorted_size=None, R=np.eye(3), K=None):
-        """"""
+        """Undistort an image using the fisheye model"""
 
         if K is None:
             K = self._K
@@ -173,12 +180,19 @@ class FishEye(object):
 
         return undistorted_img
     
-    #void cv::fisheye::undistortImage(InputArray distorted, OutputArray undistorted,
-                                     #InputArray K, InputArray D, InputArray Knew, const Size& new_size)
-    #{
-        #Size size = new_size.area() != 0 ? new_size : distorted.size();
-    
-        #cv::Mat map1, map2;
-        #fisheye::initUndistortRectifyMap(K, D, cv::Matx33d::eye(), Knew, size, CV_16SC2, map1, map2 );
-        #cv::remap(distorted, undistorted, map1, map2, INTER_LINEAR, BORDER_CONSTANT);
-    #}
+    def save(self, filename):
+        """Save the fisheye model."""
+        
+        with open(filename, 'wb') as f:
+            pickle.dump(self, f)
+
+    @staticmethod
+    def load(filename):
+        """Load a previously saved fisheye model.
+        Note: this is a static method.
+        """
+        
+        with open(filename, 'rb') as f:
+            self = pickle.load(f)
+        
+        return self
