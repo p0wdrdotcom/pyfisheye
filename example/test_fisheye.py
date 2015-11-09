@@ -4,8 +4,8 @@ import glob
 import cv2
 
 
-base_path = r'.\imgs'
-NX, NY = 8, 6
+base_path = r'G:\amit\leipzig\calibration\intrinsic\cam20'
+NX, NY = 9, 6
 
 
 def main():
@@ -16,7 +16,9 @@ def main():
         imgs_paths,
         show_imgs=True
     )
-
+    
+    fe.save('./calib.dat')
+    
     img = cv2.imread(imgs_paths[0])
     
     undist_img = fe.undistort(img, undistorted_size=(800, 800))

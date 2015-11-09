@@ -180,6 +180,25 @@ class FishEye(object):
 
         return undistorted_img
     
+    def projectPoints(self, object_points, skew=0):
+        
+        if object_points.ndim == 2:
+            object_points = np.expand_dims(object_points, 0)
+        
+        rvec = np.zeros(3).reshape(1, 1, 3)
+        tvec = np.zeros(3).reshape(1, 1, 3)
+
+        image_points, jacobian = cv2.fisheye.projectPoints(
+            object_points,
+            rvec,
+            tvec,
+            self._K,
+            self._D,
+            alpha=skew
+        )
+        
+        return np.squeeze(image_points)
+    
     def save(self, filename):
         """Save the fisheye model."""
         
