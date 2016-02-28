@@ -4,12 +4,14 @@ import glob
 import cv2
 
 
-base_path = r'G:\amit\leipzig\calibration\intrinsic\cam20'
-NX, NY = 9, 6
+#base_path = r'G:\amit\leipzig\calibration\intrinsic\cam20'
+#NX, NY = 9, 6
+base_path = r'C:\Users\amitibo\Pictures\calibration'
+NX, NY = 10, 7
 
 
 def main():
-    imgs_paths = glob.glob(os.path.join(base_path, '*.jpg'))
+    imgs_paths = glob.glob(os.path.join(base_path, '*.png'))
 
     fe = fisheye.FishEye(nx=NX, ny=NY, verbose=True)
     rms, K, D, rvecs, tvecs = fe.calibrate(

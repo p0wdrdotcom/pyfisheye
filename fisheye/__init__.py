@@ -1,1 +1,1 @@
-from .core import FishEye
+from .core import FishEye, load_model

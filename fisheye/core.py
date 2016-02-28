@@ -32,13 +32,16 @@ class FishEye(object):
         
     def calibrate(
         self,
-        img_paths,
+        img_paths=None,
+        imgs=None,
         update_model=True,
         max_iter=30,
         eps=1e-6,
         show_imgs=False
         ):
         """Calibrate a fisheye model."""
+        
+        assert not ((img_paths is None) and (imgs is None)), 'Either specify imgs or img_paths'
         
         chessboard_model = np.zeros((1, self._nx*self._ny, 3), np.float32)
         chessboard_model[0, :, :2] = np.mgrid[0:self._nx, 0:self._ny].T.reshape(-1, 2)
@@ -53,17 +56,29 @@ class FishEye(object):
         if show_imgs:
             cv2.namedWindow('success img', cv2.WINDOW_NORMAL)
             cv2.namedWindow('fail img', cv2.WINDOW_NORMAL)
+        
+        if img_paths is not None:
+            imgs = img_paths
+        
+        for img_index, img in enumerate(imgs):
             
-        for fname in img_paths:
+            if type(img) == "str":
+                fname = img
+                if self._verbose:
+                    print('Processing img: %s...' % os.path.split(fname)[1], end="")
             
-            if self._verbose:
-                print('Processing img: %s...' % os.path.split(fname)[1], end="")
+                #
+                # Load the image.
+                #
+                img = cv2.imread(fname)
+            else:
+                if self._verbose:
+                    print('Processing img: %d...' % img_index, end="")
             
-            #
-            # Load the image.
-            #
-            img = cv2.imread(fname)
-            gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+            if img.ndim == 3:
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = img
         
             #
             # Find the chess board corners
@@ -180,13 +195,22 @@ class FishEye(object):
 
         return undistorted_img
     
-    def projectPoints(self, object_points, skew=0):
+    def projectPoints(self, object_points, skew=0, rvec=None, tvec=None):
+        """Projects points using fisheye model.
+        """
         
         if object_points.ndim == 2:
             object_points = np.expand_dims(object_points, 0)
         
-        rvec = np.zeros(3).reshape(1, 1, 3)
-        tvec = np.zeros(3).reshape(1, 1, 3)
+        if rvec is None:
+            rvec = np.zeros(3).reshape(1, 1, 3)
+        else:
+            rvec = np.array(rvec).reshape(1, 1, 3)
+            
+        if tvec is None:
+            tvec = np.zeros(3).reshape(1, 1, 3)
+        else:
+            tvec = np.array(tvec).reshape(1, 1, 3)
 
         image_points, jacobian = cv2.fisheye.projectPoints(
             object_points,
@@ -199,19 +223,41 @@ class FishEye(object):
         
         return np.squeeze(image_points)
     
+    def undistortPoints(self, distorted, R=np.eye(3), K=None):
+        """Undistorts 2D points using fisheye model.
+            """
+
+        if distorted.ndim == 2:
+            distorted = np.expand_dims(distorted, 0)
+        if K is None:
+            K = self._K
+                    
+        undistorted = cv2.fisheye.projectPoints(
+            distorted,
+            self._K,
+            self._D,
+            R=R,
+            P=K
+        )
+        
+        return np.squeeze(undistorted)
+    
     def save(self, filename):
         """Save the fisheye model."""
         
         with open(filename, 'wb') as f:
             pickle.dump(self, f)
 
-    @staticmethod
-    def load(filename):
+    @classmethod
+    def load(cls, filename):
         """Load a previously saved fisheye model.
-        Note: this is a static method.
+        Note: this is a classmethod.
         """
         
         with open(filename, 'rb') as f:
-            self = pickle.load(f)
+            tmp_obj = pickle.load(f)
         
-        return self
+        obj = FishEye(nx=tmp_obj._nx, ny=tmp_obj._ny)
+        obj.__dict__.update(tmp_obj.__dict__)
+        
+        return obj
