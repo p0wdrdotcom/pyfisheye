@@ -37,7 +37,8 @@ class FishEye(object):
         update_model=True,
         max_iter=30,
         eps=1e-6,
-        show_imgs=False
+        show_imgs=False,
+        calibration_flags=cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW
         ):
         """Calibrate a fisheye model."""
         
@@ -173,7 +174,7 @@ class FishEye(object):
                 D,
                 rvecs,
                 tvecs,
-                cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW,
+                calibration_flags,
                 (cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, max_iter, eps)
             )
 
