@@ -3,15 +3,12 @@ import os
 import glob
 import cv2
 
-
-#base_path = r'G:\amit\leipzig\calibration\intrinsic\cam20'
-#NX, NY = 9, 6
-base_path = r'C:\Users\amitibo\Pictures\calibration'
-NX, NY = 10, 7
+base_path = r'.\imgs'
+NX, NY = 8, 6
 
 
 def main():
-    imgs_paths = glob.glob(os.path.join(base_path, '*.png'))
+    imgs_paths = glob.glob(os.path.join(base_path, '*.jpg'))
 
     fe = fisheye.FishEye(nx=NX, ny=NY, verbose=True)
     rms, K, D, rvecs, tvecs = fe.calibrate(
@@ -23,7 +20,7 @@ def main():
     
     img = cv2.imread(imgs_paths[0])
     
-    undist_img = fe.undistort(img, undistorted_size=(800, 800))
+    undist_img = fe.undistort(img, undistorted_size=(1200, 800))
     
     cv2.imshow('undistorted', undist_img)
     cv2.waitKey(0)

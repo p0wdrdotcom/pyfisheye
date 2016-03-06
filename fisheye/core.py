@@ -54,7 +54,8 @@ class FishEye(object):
         subpix_criteria = (cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 0.1)
         
         if show_imgs:
-            cv2.namedWindow('success img', cv2.WINDOW_NORMAL)
+            cv2.namedWindow('checkboard img', cv2.WINDOW_NORMAL)
+            cv2.namedWindow('subpix img', cv2.WINDOW_NORMAL)
             cv2.namedWindow('fail img', cv2.WINDOW_NORMAL)
         
         if img_paths is not None:
@@ -62,7 +63,7 @@ class FishEye(object):
         
         for img_index, img in enumerate(imgs):
             
-            if type(img) == "str":
+            if type(img) == str:
                 fname = img
                 if self._verbose:
                     print('Processing img: %s...' % os.path.split(fname)[1], end="")
@@ -97,10 +98,21 @@ class FishEye(object):
                 if self._verbose:
                     print('OK')
                             
+                if show_imgs:
+                    #
+                    # Draw and display the corners
+                    #
+                    img = cv2.drawChessboardCorners(
+                        img, (self._nx, self._ny),
+                        cb_2D_pts,
+                        ret
+                    )
+                    cv2.imshow('checkboard img', img)
+                    
                 cb_2d_pts_subpix = cv2.cornerSubPix(
                     gray,
                     cb_2D_pts,
-                    (11, 11),
+                    (3, 3),
                     (-1,-1),
                     subpix_criteria
                 )
@@ -119,7 +131,7 @@ class FishEye(object):
                         cb_2d_pts_subpix,
                         ret
                     )
-                    cv2.imshow('success img', img)
+                    cv2.imshow('subpix img', img)
                     cv2.waitKey(500)
             else:
                 if self._verbose:
@@ -232,8 +244,8 @@ class FishEye(object):
         if K is None:
             K = self._K
                     
-        undistorted = cv2.fisheye.projectPoints(
-            distorted,
+        undistorted = cv2.fisheye.undistortPoints(
+            distorted.astype(np.float32),
             self._K,
             self._D,
             R=R,

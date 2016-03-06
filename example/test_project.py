@@ -4,8 +4,7 @@ import os
 import glob
 import cv2
 
-
-base_path = r'G:\amit\leipzig\calibration\intrinsic\cam20'
+base_path = r'.\imgs'
 NX, NY = 8, 6
 
 
@@ -48,8 +47,7 @@ def main():
     image_points = fe.projectPoints(XYZ)
     
     for pt in image_points:
-        cv2.circle(img, (int(pt[0]), int(pt[1])), radius=5, color=(0, 0, 0), thickness=-1)
-    
+        cv2.circle(img, (int(pt[0]), int(pt[1])), radius=2, color=(0, 0, 0), thickness=-1)
     
     cv2.imshow('undistorted', img)
     cv2.waitKey(0)
