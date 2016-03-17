@@ -4,6 +4,9 @@ import pickle
 import cv2
 assert cv2.__version__[0] == '3', 'The fisheye module requires opencv version >= 3.0.0'
 import os
+from numpy import finfo
+
+eps = finfo(np.float).eps
 
 
 def load_model(filename):
@@ -13,8 +16,13 @@ def load_model(filename):
 
 
 class FishEye(object):
-    """Wrapper around the opencv fisheye calibration code.
+    """Fisheye Camera Class
     
+    Wrapper around the opencv fisheye calibration code.
+    
+    Args:
+        nx, ny (int): Number of inner corners of the chessboard pattern, in x and y axes.
+        verbose (bool): Verbose flag.
     """
 
     def __init__(
@@ -40,7 +48,20 @@ class FishEye(object):
         show_imgs=False,
         calibration_flags=cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW
         ):
-        """Calibrate a fisheye model."""
+        """Calibration
+        
+        Calibrate a fisheye model using images of chessboard pattern.
+        
+        Args:
+            img_paths (list of paths): Paths to images of chessboard pattern.
+            update_model (optional[bool]): Whether to update the stored clibration. Set to
+                False when you are interested in calculating the position of
+                chess boards.
+            max_iter (optional[int]): Maximal iteration number. Defaults to 30.
+            eps (optional[int]): error threshold. Defualts to 1e-6.
+            show_imgs (optional[bool]): Show calibtration images.
+            calibration_flags (optional[int]): opencv flags to use in the opencv.fisheye.calibrate command.
+        """
         
         assert not ((img_paths is None) and (imgs is None)), 'Either specify imgs or img_paths'
         
@@ -254,6 +275,60 @@ class FishEye(object):
         )
         
         return np.squeeze(undistorted)
+    
+    def undistortDirections(self, distorted):
+        """Undistorts 2D points using fisheye model.
+        
+        Args:
+            distorted (array): nx2 array of distorted image coords (x, y).
+        
+        Retruns:
+            Phi, Theta (array): Phi and Theta undistorted directions.
+        """
+
+        assert distorted.ndim == 2 and distorted.shape[1] == 2, "distorted should be nx2 points array."
+        
+        #
+        # Calculate 
+        #
+        f = np.array((self._K[0,0], self._K[1,1])).reshape(1, 2)
+        c = np.array((self._K[0,2], self._K[1,2])).reshape(1, 2)
+        k = self._D.ravel().astype(np.float64)
+
+        #
+        # Image points
+        #
+        pi = distorted.astype(np.float)
+        
+        #
+        # World points (distorted)
+        #
+        pw = (pi-c)/f
+        
+        #
+        # Compensate iteratively for the distortion.
+        #
+        theta_d = np.linalg.norm(pw, ord=2, axis=1)
+        theta = theta_d        
+        for j in range(10):
+            theta2 = theta**2
+            theta4 = theta2**2
+            theta6 = theta4*theta2
+            theta8 = theta6*theta2
+            theta = theta_d / (1 + k[0]*theta2 + k[1]*theta4 + k[2]*theta6 + k[3]*theta8)
+        
+        #
+        # Scale is equal to \prod{\r}{\theta_d} (http://docs.opencv.org/trunk/db/d58/group__calib3d__fisheye.html)
+        #
+        scale = np.tan(theta) / (theta_d + eps)
+        
+        #
+        # Undistort points
+        #
+        pu = pw * scale.reshape(-1, 1)
+        phi = np.arctan2(pu[:, 0], pu[:, 1])
+        
+        return phi, theta
     
     def save(self, filename):
         """Save the fisheye model."""
