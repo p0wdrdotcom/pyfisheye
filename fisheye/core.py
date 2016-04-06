@@ -316,6 +316,14 @@ class FishEye(object):
             theta6 = theta4*theta2
             theta8 = theta6*theta2
             theta = theta_d / (1 + k[0]*theta2 + k[1]*theta4 + k[2]*theta6 + k[3]*theta8)
+            
+        theta_d_ = theta * (1 + k[0]*theta**2 + k[1]*theta**4 + k[2]*theta**6 + k[3]*theta**8)
+        
+        #
+        # Mask stable theta values.
+        #
+        ratio = np.abs(theta_d_-theta_d)/(theta_d+eps)
+        mask = (ratio < 1e-2)
         
         #
         # Scale is equal to \prod{\r}{\theta_d} (http://docs.opencv.org/trunk/db/d58/group__calib3d__fisheye.html)
@@ -328,7 +336,7 @@ class FishEye(object):
         pu = pw * scale.reshape(-1, 1)
         phi = np.arctan2(pu[:, 0], pu[:, 1])
         
-        return phi, theta
+        return phi, theta, mask
     
     def save(self, filename):
         """Save the fisheye model."""
