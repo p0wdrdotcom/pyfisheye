@@ -1,11 +1,11 @@
-from __future__ import print_function
-import logging
-import numpy as np
-import pickle
 import cv2
 assert cv2.__version__[0] == '3', 'The fisheye module requires opencv version >= 3.0.0'
-import os
+from joblib import Parallel, delayed
+import logging
 from numpy import finfo
+import numpy as np
+import os
+import pickle
 
 eps = finfo(np.float).eps
 
@@ -14,6 +14,51 @@ def load_model(filename):
     """Load a previosly saved fisheye model."""
 
     return FishEye.load(filename)
+
+
+def extract_corners(img, img_index, nx, ny, subpix_criteria, verbose):
+    """Extract chessboard corners."""
+    
+    if type(img) == str:
+        fname = img
+        if verbose:
+            logging.info("Processing img: {}...".format(os.path.split(fname)[1]))
+
+        #
+        # Load the image.
+        #
+        img = cv2.imread(fname)
+    else:
+        if verbose:
+            logging.info("Processing img: {}...".format(img_index))
+
+    if img.ndim == 3:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img
+
+    #
+    # Find the chess board corners
+    #
+    ret, cb_2D_pts = cv2.findChessboardCorners(
+        gray,
+        (nx, ny),
+        cv2.CALIB_CB_ADAPTIVE_THRESH+cv2.CALIB_CB_FAST_CHECK+cv2.CALIB_CB_NORMALIZE_IMAGE
+    )
+
+    if ret:
+        #
+        # Refine the corners.
+        #
+        cb_2D_pts = cv2.cornerSubPix(
+            gray,
+            cb_2D_pts,
+            (3, 3),
+            (-1,-1),
+            subpix_criteria
+        )
+
+    return ret, cb_2D_pts
 
 
 class FishEye(object):
@@ -47,7 +92,9 @@ class FishEye(object):
         max_iter=30,
         eps=1e-6,
         show_imgs=False,
-        calibration_flags=cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW
+        calibration_flags=cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW,
+        n_jobs=-1,
+        backend='threading'
         ):
         """Calibration
 
@@ -78,13 +125,19 @@ class FishEye(object):
 
         if show_imgs:
             cv2.namedWindow('checkboard img', cv2.WINDOW_NORMAL)
-            cv2.namedWindow('subpix img', cv2.WINDOW_NORMAL)
             cv2.namedWindow('fail img', cv2.WINDOW_NORMAL)
 
         if img_paths is not None:
             imgs = img_paths
 
-        for img_index, img in enumerate(imgs):
+        with Parallel(n_jobs=n_jobs, backend=backend) as parallel:
+            rets = parallel(
+                delayed(extract_corners)(
+                    img, img_index, self._nx, self._ny, subpix_criteria, self._verbose
+                    ) for img_index, img in enumerate(imgs)
+            )
+        
+        for img_index, (img, (ret, cb_2d_pts)) in enumerate(zip(imgs, rets)):
 
             if type(img) == str:
                 fname = img
@@ -99,20 +152,6 @@ class FishEye(object):
                 if self._verbose:
                     logging.info("Processing img: {}...".format(img_index))
 
-            if img.ndim == 3:
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            else:
-                gray = img
-
-            #
-            # Find the chess board corners
-            #
-            ret, cb_2D_pts = cv2.findChessboardCorners(
-                gray,
-                (self._nx, self._ny),
-                cv2.CALIB_CB_ADAPTIVE_THRESH+cv2.CALIB_CB_FAST_CHECK+cv2.CALIB_CB_NORMALIZE_IMAGE
-            )
-
             if ret:
                 #
                 # Was able to find the chessboard in the image, append the 3D points
@@ -121,29 +160,11 @@ class FishEye(object):
                 if self._verbose:
                     logging.info('OK')
 
-                if show_imgs:
-                    #
-                    # Draw and display the corners
-                    #
-                    img = cv2.drawChessboardCorners(
-                        img, (self._nx, self._ny),
-                        cb_2D_pts,
-                        ret
-                    )
-                    cv2.imshow('checkboard img', img)
-
-                cb_2d_pts_subpix = cv2.cornerSubPix(
-                    gray,
-                    cb_2D_pts,
-                    (3, 3),
-                    (-1,-1),
-                    subpix_criteria
-                )
                 #
                 # The 2D points are reshaped to (1, N, 2). This is a hack to handle the bug
                 # in the opecv python wrapper.
                 #
-                chess_2Dpts_list.append(cb_2d_pts_subpix.reshape(1, -1, 2))
+                chess_2Dpts_list.append(cb_2d_pts.reshape(1, -1, 2))
 
                 if show_imgs:
                     #
@@ -151,10 +172,10 @@ class FishEye(object):
                     #
                     img = cv2.drawChessboardCorners(
                         img, (self._nx, self._ny),
-                        cb_2d_pts_subpix,
+                        cb_2d_pts,
                         ret
                     )
-                    cv2.imshow('subpix img', img)
+                    cv2.imshow('checkboard img', img)
                     cv2.waitKey(500)
             else:
                 if self._verbose:
@@ -191,7 +212,7 @@ class FishEye(object):
             cv2.fisheye.calibrate(
                 [chessboard_model]*N_OK,
                 chess_2Dpts_list,
-                gray.shape[::-1],
+                (img.shape[1], img.shape[0]),
                 K,
                 D,
                 rvecs,
