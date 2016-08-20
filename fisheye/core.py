@@ -10,10 +10,10 @@ import pickle
 eps = finfo(np.float).eps
 
 
-def load_model(filename):
+def load_model(filename, calib_img_shape=None):
     """Load a previosly saved fisheye model."""
 
-    return FishEye.load(filename)
+    return FishEye.load(filename, calib_img_shape)
 
 
 def extract_corners(img, img_index, nx, ny, subpix_criteria, verbose):
