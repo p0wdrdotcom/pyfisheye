@@ -75,6 +75,7 @@ class FishEye(object):
         self,
         nx,
         ny,
+        img_shape=None,        
         verbose=False
         ):
 
@@ -83,6 +84,7 @@ class FishEye(object):
         self._verbose = verbose
         self._K = np.zeros((3, 3))
         self._D = np.zeros((4, 1))
+        self._img_shape = img_shape
 
     def calibrate(
         self,
@@ -152,6 +154,11 @@ class FishEye(object):
                 if self._verbose:
                     logging.info("Processing img: {}...".format(img_index))
 
+            if self._img_shape == None:
+                self._img_shape = img.shape[:2]
+            else:
+                assert self._img_shape == img.shape[:2], \
+                       "All images must share the same size."
             if ret:
                 #
                 # Was able to find the chessboard in the image, append the 3D points
@@ -281,7 +288,7 @@ class FishEye(object):
 
     def undistortPoints(self, distorted, R=np.eye(3), K=None):
         """Undistorts 2D points using fisheye model.
-            """
+        """
 
         if distorted.ndim == 2:
             distorted = np.expand_dims(distorted, 0)
@@ -366,16 +373,34 @@ class FishEye(object):
         with open(filename, 'wb') as f:
             pickle.dump(self, f)
 
+    @property
+    def img_shape(self):
+        """Shape of image used for calibration."""
+        
+        return self._img_shape
+    
     @classmethod
-    def load(cls, filename):
+    def load(cls, filename, calib_img_shape=None):
         """Load a previously saved fisheye model.
         Note: this is a classmethod.
+        
+        Args:
+            filename (str): Path to previously saved FishEye object.
+            calib_img_shape (Optional[tuple]): Shape of images used for            
+                calibration.
+        Returns:
+            FishEye object.
         """
 
         with open(filename, 'rb') as f:
             tmp_obj = pickle.load(f)
 
-        obj = FishEye(nx=tmp_obj._nx, ny=tmp_obj._ny)
+        assert hasattr(tmp_obj, '_img_shape') or calib_img_shape is not None, \
+               "FishEye obj does not include 'img_shape'. You need to explicitly specify one."
+        
+        img_shape = getattr(tmp_obj, 'img_shape', calib_img_shape[:2])
+        
+        obj = FishEye(nx=tmp_obj._nx, ny=tmp_obj._ny, img_shape=img_shape)
         obj.__dict__.update(tmp_obj.__dict__)
 
         return obj
